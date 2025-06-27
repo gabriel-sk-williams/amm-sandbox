@@ -1,78 +1,67 @@
+
+
+pub mod traders;
+pub mod wiener;
+pub mod draw;
+
 use num_format::{Locale, ToFormattedString};
 
-
-#[derive(Debug)]
-pub struct Trader {
-    yes_owned: u64,
-    no_owned: u64
-}
-
-
 fn main() {
-    println!("pm_amm");
 
-    let k: u64 = 2_500_000_000;
-    let yes_amount: u64 = 1800;
-    let no_amount: u64 = 200;
+    // steps represent number of trading days
+    // 252 trading days per year
+    // 390 minutes in a trading day
+    let steps = 252usize;
 
-    let yes_price: u64 = 50;
-    let no_price: u64 = 50;
+    let series = wiener::simulate_gbm(steps);
 
-    // xy=k, x and y each represent total value of one token
-    // let x = yes_amount * yes_price;
-    // let y = no_amount * no_price;
-    // let k = x * y;
 
-    println!("{}", fmt(k));
-
-    let traders = create_traders();
-
-    println!("{:?}", traders);
-
-    let (x, y) = get_prices(yes_amount, no_amount, k);
-
-    println!("{}", fmt(x));
-    println!("{}", fmt(y));
-
+    let xmax = steps as f64;
+    let ymax = 250.0;
+    let _ = draw::console::chart(series, xmax, ymax);
 }
 
+#[allow(dead_code)]
 fn fmt(num:u64) -> String {
     num.to_formatted_string(&Locale::fr)
 }
 
-fn create_traders(/*num:u64*/) -> Vec<Trader> {
-
-    let trader_one = Trader {
-        yes_owned: 500,
-        no_owned: 0,
-    };
-
-    let trader_two = Trader {
-        yes_owned: 0,
-        no_owned: 500,
-    };
-
-    let bruh = vec![trader_one, trader_two];
-
-    bruh
+#[allow(dead_code)]
+fn z_score(x: f64, mean: f64, sd: f64) -> f64 {
+    (x - mean) / sd
 }
 
-fn get_prices(yes_amount: u64, no_amount: u64, k: u64) -> (u64, u64) {
 
-    // x + y must equal 100;
 
-    let x = 80;
-    let y = 20;
 
-    return (x, y)
+
+
+
+
+
+
+// Gaussian score dynamics
+// L overall liquidity or scaling factor
+// ϕ probability density function
+// Φ cumulative distribution function of the normal distribution
+/*
+#[allow(dead_code)]
+fn static_amm(x: u64, y: u64,) -> u64 {
+
+    0
 }
+*/
 
 /*
-fn uniswap() {
+
+
+fn curve() {
 
 }
 
-fn curve() {
+// geometric mean market makers
+// uniform AMMs for assets who prices follow geometric Brownian motion
+fn uniswap() {
 
 }
 
