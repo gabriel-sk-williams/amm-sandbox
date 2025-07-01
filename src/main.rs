@@ -9,28 +9,20 @@ use std::io;
 use std::io::Write;
 use num_format::{Locale, ToFormattedString};
 
+// steps represent number of trading days
+// 252 trading days per year
+// 390 minutes in a trading day
+
 fn main() {
-    // steps represent number of trading days
-    // 252 trading days per year
-    // 390 minutes in a trading day
-    let steps = 252usize;
+    
+    let mut data = wiener::simulate_gbm(252usize);
+    draw_chart();
 
-    let series = wiener::simulate_gbm(steps);
-
-
-    let xmax = steps as f64;
-    let ymax = 250.0;
-    let _ = draw::console::chart(series, xmax, ymax);
-
-    // println!("\r\r");
-    println!(".");
-    println!(".");
-    println!("sample text");
     // run prompt
     loop {
         let input = prompt(">");
         
-        if !handle_input(&input) {
+        if !handle_input(&input, &mut data) {
             break;
         }
     }
@@ -50,6 +42,17 @@ fn prompt(prompt_text: &str) -> String {
     input.trim().to_string()
 }
 
+fn draw_chart() {
+    let steps = 252usize;
+    let data = wiener::simulate_gbm(steps);
+    let xmax = steps as f64;
+    let ymax = 250.0;
+    let _ = draw::console::chart(data, xmax, ymax);
+    println!(".");
+    println!(".");
+    println!(".");
+}
+
 /*
 \x1B[2J\x1B[1;1H - Clear screen
 \x1B[1A - Move cursor up one line
@@ -59,8 +62,11 @@ fn prompt(prompt_text: &str) -> String {
 \x1B[u - Restore cursor position
 */
 
-pub fn handle_input(command: &str) -> bool {
+pub fn handle_input(command: &str, _data: &mut Vec<(f64, f64)>) -> bool {
     match command {
+        "draw" | "d" => {
+            print!("drawing")
+        }
         "help" | "h" => {
             println!("Available commands:");
             println!("  help, h - Show this help");
@@ -81,14 +87,18 @@ pub fn handle_input(command: &str) -> bool {
             print!("\x1B[1A");       // Move up to update content        
             print!("\x1B[2K");       // Clear that line
             print!("\x1B[1G");       // Move to beginning
-            print!("updated text");           // Print new content
+            print!("updated text");  // Print new content
             print!("\x1B[1A");       // Move up to update content        
             print!("\x1B[2K");       // Clear that line
-            print!("\x1B[1G");
+            print!("\x1B[1G");       // Move to beginning
             print!("Updated header");  // Print new content
             print!("\x1B[u");
             io::stdout().flush().unwrap();
         },
+        "reset" | "r" => {
+            print!("\x1B[2J\x1B[1;1H"); // Clear screen
+            draw_chart();
+        }
         "" => {
             // Do nothing for empty input
         },
