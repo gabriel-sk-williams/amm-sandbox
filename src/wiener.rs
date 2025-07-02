@@ -6,10 +6,8 @@ use rand_distr::{Normal, Distribution};
 // For financial applications:
 // Daily stock returns might have variance around 0.0001 to 0.01 (std dev 1-10%)
 // Annual volatility is often 10-30% (variance 0.01 to 0.09)
-pub fn simulate_gbm(steps: usize) -> Vec<(f64, f64)> {
+pub fn simulate_gbm(steps: usize, drift: f64, volatility: f64) -> Vec<(f64, f64)> {
 
-    let drift = 0.5; // risk-free rate ~0.05
-    let volatility = 0.5; // standard deviation
     let dt = 1.0 / steps as f64;
     
     let mut current_price = 100.0;

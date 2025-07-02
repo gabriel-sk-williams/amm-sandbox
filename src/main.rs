@@ -9,26 +9,60 @@ use std::io;
 use std::io::Write;
 use num_format::{Locale, ToFormattedString};
 
-// steps represent number of trading days
+// #[derive(Clone)]
+pub struct Chart {
+    steps: usize,
+    drift: f64, // 𝜇, risk-free rate ~0.05
+    volatility: f64, // σ, standard deviation
+    xmax: f64,
+    ymax: f64,
+    data: Vec<(f64, f64)>,
+}
+
+impl Chart {
+    fn gen_data(&mut self) {
+        self.data = wiener::simulate_gbm(self.steps, self.drift, self.volatility);
+    }
+}
+
+// Steps represent number of trading days
 // 252 trading days per year
+// Factors: 1, 2, 3, 4, 6, 7, 9, 12, 14, 18, 21, 28, 36, 42, 63, 84, 126, 252
+
 // 390 minutes in a trading day
+// Factors: 1, 2, 3, 5, 6, 10, 13, 15, 26, 30, 39, 65, 78, 130, 195, 390
 
 fn main() {
-    
-    let mut data = wiener::simulate_gbm(252usize);
-    draw_chart();
+
+    let steps = 252usize;
+
+    let mut chart = Chart{
+        steps,
+        drift: 0.5f64,
+        volatility: 0.5f64,
+        xmax: steps as f64,
+        ymax: 250.0,
+        data: vec![],
+    };
+
+    chart.gen_data();
+
+    draw(&chart);
+
+    setup_prompt_area();
 
     // run prompt
     loop {
         let input = prompt(">");
         
-        if !handle_input(&input, &mut data) {
+        if !handle_input(&input, &mut chart) {
             break;
         }
     }
 }
 
 fn prompt(prompt_text: &str) -> String {
+
     print!("{}", prompt_text);
     io::stdout().flush().unwrap(); // immediately print carrot
     
@@ -36,21 +70,18 @@ fn prompt(prompt_text: &str) -> String {
     io::stdin().read_line(&mut input)
         .expect("Failed to read line");
 
-    print!("\x1B[1A");
-    print!("\x1B[2K");
+    print!("\x1B[1A"); // Move cursor up one line
+    print!("\x1B[2K"); // Clear entire current line
     
     input.trim().to_string()
 }
 
-fn draw_chart() {
-    let steps = 252usize;
-    let data = wiener::simulate_gbm(steps);
-    let xmax = steps as f64;
-    let ymax = 250.0;
-    let _ = draw::console::chart(data, xmax, ymax);
-    println!(".");
-    println!(".");
-    println!(".");
+fn draw(chart: &Chart) {
+
+    let Chart { xmax, ymax, data, .. } = chart;
+
+    let _ = draw::console::chart(data.clone(), *xmax, *ymax);
+    
 }
 
 /*
@@ -62,7 +93,17 @@ fn draw_chart() {
 \x1B[u - Restore cursor position
 */
 
-pub fn handle_input(command: &str, _data: &mut Vec<(f64, f64)>) -> bool {
+fn setup_prompt_area() {
+    // Reserve space for status area (3 lines) + prompt line
+    println!("Status: Ready");
+    println!("Data points: 0");
+    println!("Last action: None");
+    println!();
+    print!("\x1B[1A"); 
+    io::stdout().flush().unwrap();
+}
+
+pub fn handle_input(command: &str, chart: &mut Chart) -> bool {
     match command {
         "draw" | "d" => {
             print!("drawing")
@@ -79,25 +120,21 @@ pub fn handle_input(command: &str, _data: &mut Vec<(f64, f64)>) -> bool {
             return false; // Signal to exit the loop
         },
         "clear" => {
-            print!("\x1B[s");        // Save current cursor position
-            print!("\x1B[1A");       // Move up to update content        
-            print!("\x1B[2K");       // Clear that line
-            print!("\x1B[1G");       // Move to beginning
-            print!("Updated text");  // Print new content
-            print!("\x1B[1A");       // Move up to update content        
-            print!("\x1B[2K");       // Clear that line
-            print!("\x1B[1G");       // Move to beginning
-            print!("updated text");  // Print new content
-            print!("\x1B[1A");       // Move up to update content        
-            print!("\x1B[2K");       // Clear that line
-            print!("\x1B[1G");       // Move to beginning
-            print!("Updated header");  // Print new content
-            print!("\x1B[u");
+            print!("\x1B[s");   // Save cursor position
+            print!("\x1B[3A");  // Move up to update content        
+
+            print!("\x1B[2K\rStatus: Active");
+            print!("\x1B[B\x1B[2K\rData points:"); // {}", data.len());
+            print!("\x1B[B\x1B[2K\rLast action:"); // {}", last_action);
+
+            print!("\x1B[u");   // Restore cursor position
             io::stdout().flush().unwrap();
         },
         "reset" | "r" => {
-            print!("\x1B[2J\x1B[1;1H"); // Clear screen
-            draw_chart();
+            // print!("\x1B[2J\x1B[1;1H"); // Clear screen
+            chart.gen_data();
+            draw(chart);
+            setup_prompt_area();
         }
         "" => {
             // Do nothing for empty input

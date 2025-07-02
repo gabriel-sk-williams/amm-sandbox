@@ -3,8 +3,6 @@ use super::pixels::{PixelState, TextDrawingBackend};
 
 use plotters::prelude::*;
 use plotters::style::{CYAN};
-use plotters_backend::{DrawingBackend};
-use std::ops::Range;
 use std::error::Error;
 
 // Modified version of:
