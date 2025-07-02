@@ -86,7 +86,8 @@ fn draw(chart: &Chart) {
 
 /*
 \x1B[2J\x1B[1;1H - Clear screen
-\x1B[1A - Move cursor up one line
+\x1B[A - Move cursor up one line
+\x1B[B - Move cursor down one line
 \x1B[2K - Clear entire current line
 \x1B[0J - Clear from cursor to end of screen
 \x1B[s - Save cursor position
@@ -109,11 +110,10 @@ pub fn handle_input(command: &str, chart: &mut Chart) -> bool {
             print!("drawing")
         }
         "help" | "h" => {
-            println!("Available commands:");
+            print!("\x1B[3A");  // Move up to update content   
             println!("  help, h - Show this help");
             println!("  quit, q - Exit the program");
             println!("  echo <text> - Echo back the text");
-            println!("  clear - Clear the screen");
         },
         "quit" | "q" => {
             println!("Goodbye!");
@@ -121,8 +121,8 @@ pub fn handle_input(command: &str, chart: &mut Chart) -> bool {
         },
         "clear" => {
             print!("\x1B[s");   // Save cursor position
-            print!("\x1B[3A");  // Move up to update content        
 
+            print!("\x1B[3A");  // Move up to update content        
             print!("\x1B[2K\rStatus: Active");
             print!("\x1B[B\x1B[2K\rData points:"); // {}", data.len());
             print!("\x1B[B\x1B[2K\rLast action:"); // {}", last_action);
@@ -131,7 +131,7 @@ pub fn handle_input(command: &str, chart: &mut Chart) -> bool {
             io::stdout().flush().unwrap();
         },
         "reset" | "r" => {
-            // print!("\x1B[2J\x1B[1;1H"); // Clear screen
+            print!("\x1B[2J\x1B[1;1H"); // Clear screen
             chart.gen_data();
             draw(chart);
             setup_prompt_area();
@@ -140,7 +140,13 @@ pub fn handle_input(command: &str, chart: &mut Chart) -> bool {
             // Do nothing for empty input
         },
         _ => {
-            println!("Unknown command: '{}'. Type 'help' for available commands.", command);
+            print!("\x1B[s");   // Save cursor position
+            print!("\x1B[3A");  // Move up to update content   
+            print!("\x1B[2K\rUnknown command: '{}'. Type 'help' for available commands.", command);
+            print!("\x1B[B\x1B[2K\r.");
+            print!("\x1B[B\x1B[2K\r.");
+            print!("\x1B[u");   // Restore cursor position
+            io::stdout().flush().unwrap();
         }
     }
     true // Continue the loop
