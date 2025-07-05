@@ -2,26 +2,30 @@
 use std::f64::consts::E;
 use std::f64::consts::PI;
 use rand_distr::{Normal, Distribution};
+use crate::Regime;
 
-// For financial applications:
-// Daily stock returns might have variance around 0.0001 to 0.01 (std dev 1-10%)
-// Annual volatility is often 10-30% (variance 0.01 to 0.09)
-pub fn simulate_gbm(steps: usize, drift: f64, volatility: f64) -> Vec<(f64, f64)> {
 
-    let dt = 1.0 / steps as f64;
+// simulate <duration> steps from last timestamp
+pub fn simulate_gbm(regime: Regime, duration: usize, last_entry: (f64, f64)) -> Vec<(f64, f64)> {
+
+    let Regime { steps, drift, volatility } = regime;
+    let (last_timestamp, last_price) = last_entry;
     
-    let mut current_price = 100.0;
-
-    let mut path = Vec::with_capacity(steps + 1);
-    path.push((0.0, current_price));
-
+    let dt = 1.0 / steps as f64;
     let normal = Normal::new(0.0, dt.sqrt()).unwrap();
     
-    for time in 0..steps {
+    let mut current_price = last_price;
+
+    let mut path = Vec::with_capacity(duration);
+
+    let next_timestamp = last_timestamp as usize + 1;
+    let endpoint = duration + next_timestamp;
+
+    for timestamp in next_timestamp..endpoint {
         let dw = normal.sample(&mut rand::rng());
-        let price = geometric_brownian_motion(current_price, drift, volatility, dt, dw);
-        current_price = price;
-        path.push((time as f64, price));
+        let next_price = geometric_brownian_motion(current_price, drift, volatility, dt, dw);
+        current_price = next_price;
+        path.push((timestamp as f64, next_price));
     }
 
     path
@@ -40,13 +44,13 @@ pub fn geometric_brownian_motion(
 #[allow(dead_code)]
 pub fn wiener_process(total_time: f64, steps: usize) -> Vec<f64> {
     let dt = total_time / steps as f64;
-    let normal = Normal::new(0.0, dt.sqrt()).unwrap(); // N(0, sqrt(dt))
+    let normal = Normal::new(0.0, dt.sqrt()).unwrap();
 
     println!("{:?} / {:?} = {:?}", total_time, steps, dt);
     println!("{:?}{:?}", dt, normal);
 
     let mut w_path = Vec::with_capacity(steps + 1);
-    w_path.push(0.0); // W(0) = 0
+    w_path.push(0.0);
 
     for i in 0..steps {
         let increment = normal.sample(&mut rand::rng());
@@ -98,4 +102,9 @@ pub fn probability_density(x:f64) -> f64 {
     let denominator = normalizing_constant.sqrt();
 
     1.0 / denominator * e_raised
+}
+
+#[allow(dead_code)]
+fn z_score(x: f64, mean: f64, sd: f64) -> f64 {
+    (x - mean) / sd
 }

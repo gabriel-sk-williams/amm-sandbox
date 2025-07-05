@@ -11,17 +11,45 @@ use num_format::{Locale, ToFormattedString};
 
 // #[derive(Clone)]
 pub struct Chart {
-    steps: usize,
-    drift: f64, // 𝜇, risk-free rate ~0.05
-    volatility: f64, // σ, standard deviation
-    xmax: f64,
-    ymax: f64,
+    regime: Regime,
     data: Vec<(f64, f64)>,
 }
 
+#[derive(Clone)]
+pub struct Regime {
+    steps: usize, // length of market period
+    drift: f64, // 𝜇, risk-free rate ~0.05
+    volatility: f64, // σ, standard deviation
+}
+
 impl Chart {
-    fn gen_data(&mut self) {
-        self.data = wiener::simulate_gbm(self.steps, self.drift, self.volatility);
+    fn reset_data(&mut self) {
+        self.data = vec![(0f64, 100f64)];
+    }
+    fn gen_data(&mut self, duration: usize) {
+        let entry = self.last_entry();
+        let simulation = wiener::simulate_gbm(self.regime.clone(), duration, entry);
+
+        self.data.append(&mut simulation.clone());
+    }
+    /*
+    fn buy(&mut self) {
+        println!("buy");
+    }
+    fn sell(&mut self) {
+        println!("sell");
+    }
+     */
+    fn current_price_rounded(&mut self) -> f64 {
+        let (_, value) = self.data.last().unwrap();
+        (value * 100.0).round() / 100.0
+    }
+    fn last_entry(&mut self) -> (f64, f64) {
+        let entry = self.data.last().unwrap();
+        *entry
+    }
+    fn points(&mut self) -> usize {
+        self.data.len()
     }
 }
 
@@ -32,24 +60,28 @@ impl Chart {
 // 390 minutes in a trading day
 // Factors: 1, 2, 3, 5, 6, 10, 13, 15, 26, 30, 39, 65, 78, 130, 195, 390
 
+// For financial applications:
+// Daily stock returns might have variance around 0.0001 to 0.01 (std dev 1-10%)
+// Annual volatility is often 10-30% (variance 0.01 to 0.09)
 fn main() {
 
-    let steps = 252usize;
-
-    let mut chart = Chart{
-        steps,
+    
+    let regime = Regime {
+        steps: 252usize, 
         drift: 0.5f64,
         volatility: 0.5f64,
-        xmax: steps as f64,
-        ymax: 250.0,
-        data: vec![],
     };
 
-    chart.gen_data();
+    let mut chart = Chart{
+        regime,
+        data: vec![(0f64, 100f64)],
+    };
+
+    chart.gen_data(99usize);
 
     draw(&chart);
 
-    setup_prompt_area();
+    setup_prompt_area(&mut chart);
 
     // run prompt
     loop {
@@ -78,9 +110,9 @@ fn prompt(prompt_text: &str) -> String {
 
 fn draw(chart: &Chart) {
 
-    let Chart { xmax, ymax, data, .. } = chart;
+    let Chart { regime, data, .. } = chart;
 
-    let _ = draw::console::chart(data.clone(), *xmax, *ymax);
+    let _ = draw::console::chart(data.clone(), regime.steps);
     
 }
 
@@ -94,54 +126,117 @@ fn draw(chart: &Chart) {
 \x1B[u - Restore cursor position
 */
 
-fn setup_prompt_area() {
+fn setup_prompt_area(chart: &mut Chart) {
     // Reserve space for status area (3 lines) + prompt line
-    println!("Status: Ready");
-    println!("Data points: 0");
-    println!("Last action: None");
+
+    let price = chart.current_price_rounded();
+    let points = chart.points();
+
+    println!("Current price: {:?}", price);
+    println!("Data points: {:?}", points);
+    println!(".");
     println!();
     print!("\x1B[1A"); 
     io::stdout().flush().unwrap();
 }
 
 pub fn handle_input(command: &str, chart: &mut Chart) -> bool {
-    match command {
-        "draw" | "d" => {
-            print!("drawing")
-        }
-        "help" | "h" => {
-            print!("\x1B[3A");  // Move up to update content   
-            println!("  help, h - Show this help");
-            println!("  quit, q - Exit the program");
-            println!("  echo <text> - Echo back the text");
+    // Split command into parts for parsing
+    let parts: Vec<&str> = command.split_whitespace().collect();
+    
+    match parts.as_slice() {
+        ["help"] | ["h"] => {
+            print!("\x1B[3A");  // Move up to update content
+            println!("  run <integer>");
+            println!("  buy | sell <amount>");
+            println!("  quit, q");
         },
-        "quit" | "q" => {
+        ["quit"] | ["q"] => {
             println!("Goodbye!");
             return false; // Signal to exit the loop
         },
-        "clear" => {
-            print!("\x1B[s");   // Save cursor position
-
-            print!("\x1B[3A");  // Move up to update content        
-            print!("\x1B[2K\rStatus: Active");
-            print!("\x1B[B\x1B[2K\rData points:"); // {}", data.len());
-            print!("\x1B[B\x1B[2K\rLast action:"); // {}", last_action);
-
-            print!("\x1B[u");   // Restore cursor position
-            io::stdout().flush().unwrap();
-        },
-        "reset" | "r" => {
+        ["clear"] | ["c"] => {
             print!("\x1B[2J\x1B[1;1H"); // Clear screen
-            chart.gen_data();
+            chart.reset_data();
+            chart.gen_data(99usize);
             draw(chart);
-            setup_prompt_area();
+            setup_prompt_area(chart);
+        },
+        ["run", time_str] | ["r", time_str] => {
+            match time_str.parse::<usize>() {
+                Ok(time) => {
+                    print!("\x1B[2J\x1B[1;1H"); // Clear screen
+                    chart.gen_data(time);
+                    draw(chart);
+                    setup_prompt_area(chart);
+                },
+                Err(_) => {
+                    print!("\x1B[s");   // Save cursor position
+                    print!("\x1B[3A");  // Move up to update content
+                    print!("\x1B[2K\rInvalid amount for RUN: '{}'", time_str);
+                    print!("\x1B[B\x1B[2K\r.");
+                    print!("\x1B[B\x1B[2K\r.");
+                    print!("\x1B[u");   // Restore cursor position
+                    io::stdout().flush().unwrap();
+                }
+            }
         }
-        "" => {
+        ["buy", amount_str] => {
+            match amount_str.parse::<i32>() {
+                Ok(amount) => {
+                    print!("\x1B[s");   // Save cursor position
+                    print!("\x1B[3A");  // Move up to update content
+                    print!("\x1B[2K\rBought {} units", amount);
+                    print!("\x1B[B\x1B[2K\r.");
+                    print!("\x1B[B\x1B[2K\r.");
+                    print!("\x1B[u");   // Restore cursor position
+                    io::stdout().flush().unwrap();
+                    
+                    // Add your buy logic here
+                    // chart.buy(amount);
+                },
+                Err(_) => {
+                    print!("\x1B[s");   // Save cursor position
+                    print!("\x1B[3A");  // Move up to update content
+                    print!("\x1B[2K\rInvalid amount for BUY: '{}'", amount_str);
+                    print!("\x1B[B\x1B[2K\r.");
+                    print!("\x1B[B\x1B[2K\r.");
+                    print!("\x1B[u");   // Restore cursor position
+                    io::stdout().flush().unwrap();
+                }
+            }
+        },
+        ["sell", amount_str] => {
+            match amount_str.parse::<i32>() {
+                Ok(amount) => {
+                    print!("\x1B[s");   // Save cursor position
+                    print!("\x1B[3A");  // Move up to update content
+                    print!("\x1B[2K\rSold {} units", amount);
+                    print!("\x1B[B\x1B[2K\r.");
+                    print!("\x1B[B\x1B[2K\r.");
+                    print!("\x1B[u");   // Restore cursor position
+                    io::stdout().flush().unwrap();
+                    
+                    // Add your sell logic here
+                    // chart.sell(amount);
+                },
+                Err(_) => {
+                    print!("\x1B[s");   // Save cursor position
+                    print!("\x1B[3A");  // Move up to update content
+                    print!("\x1B[2K\rInvalid amount for SELL: '{}'", amount_str);
+                    print!("\x1B[B\x1B[2K\r.");
+                    print!("\x1B[B\x1B[2K\r.");
+                    print!("\x1B[u");   // Restore cursor position
+                    io::stdout().flush().unwrap();
+                }
+            }
+        },
+        [] => {
             // Do nothing for empty input
         },
         _ => {
             print!("\x1B[s");   // Save cursor position
-            print!("\x1B[3A");  // Move up to update content   
+            print!("\x1B[3A");  // Move up to update content
             print!("\x1B[2K\rUnknown command: '{}'. Type 'help' for available commands.", command);
             print!("\x1B[B\x1B[2K\r.");
             print!("\x1B[B\x1B[2K\r.");
@@ -152,59 +247,8 @@ pub fn handle_input(command: &str, chart: &mut Chart) -> bool {
     true // Continue the loop
 }
 
-pub fn clear_screen() {
-    println!("clearing screen");
-    
-}
-
-pub fn refresh_chart() {
-    println!("refreshing");
-    println!("\x1B[2K");
-    
-}
-
-pub fn quit_program() {
-    println!("Goodbye!");
-    std::process::exit(0);
-}
-
-
-// Gaussian score dynamics
-// L overall liquidity or scaling factor
-// ϕ probability density function
-// Φ cumulative distribution function of the normal distribution
-
-/*
-#[allow(dead_code)]
-fn static_amm(x: u64, y: u64,) -> u64 {
-    0
-}
-*/
-
-/*
-
-
-fn curve() {
-
-}
-
-// geometric mean market makers
-// uniform AMMs for assets who prices follow geometric Brownian motion
-fn uniswap() {
-
-}
-
-fn balancer() {
-
-}
-*/
-
 #[allow(dead_code)]
 fn fmt(num:u64) -> String {
     num.to_formatted_string(&Locale::fr)
 }
 
-#[allow(dead_code)]
-fn z_score(x: f64, mean: f64, sd: f64) -> f64 {
-    (x - mean) / sd
-}
